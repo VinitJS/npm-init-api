@@ -33,7 +33,7 @@ class ModelTests(TestCase):
     def test_create_superuser_successfully(self):
         """Test create superuser successfully"""
         email = 'super@npminit.com'
-        password = 'TestPass,123'
+        password = 'SuperPass,123'
         superuser = get_user_model().objects.create_superuser(email, password)
         
         self.assertTrue(superuser.is_superuser)
