@@ -1,3 +1,14 @@
+"""
+> success variations
+    - fields conbinations
+> failure variations
+    - missing fields
+    - incorrect data type
+    - incorrect data format
+    - access denied
+        - authentication missing
+        - authentication incorrect
+"""
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -7,21 +18,13 @@ from rest_framework import status
 
 CREATE_USER_URL = reverse('user:create')
 TOKEN_URL = reverse('user:token')
+ME_URL = reverse('user:me')
 
 def create_user(**params):
     return get_user_model().objects.create_user(**params)
 
 class PublicUserApiTests(TestCase):
-    """
-        Test user public APIs
-        > success variations
-            - fields conbinations
-        > failure variations
-            - missing fields
-            - incorrect data type
-            - incorrect data format
-            - access denied
-    """
+    """Test user public APIs""" 
 
     def setUp(self):
         # before all
@@ -31,7 +34,7 @@ class PublicUserApiTests(TestCase):
         """Test creating user with valid payload is successful"""
         payload = {
             'email': 'testuser@npminit.com',
-            'password': 'testPass,123',
+            'password': 'Testpass,123',
             'name': 'Test User Name'
         }
         res = self.client.post(CREATE_USER_URL, payload)
@@ -45,7 +48,7 @@ class PublicUserApiTests(TestCase):
         """Test trying to create user that already exists"""
         payload = {
             'email': 'testuser@npminit.com',
-            'password': 'testPass,123'
+            'password': 'Testpass,123'
         }
         create_user(**payload);
 
@@ -104,8 +107,8 @@ class PublicUserApiTests(TestCase):
         self.assertNotIn('token', res.data)
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
     
-    def test_create_token_missing_field(self):
-        """Test the email and password are required"""
+    def test_retrieve_user_unauthorized(self):
+        """Test authentication is required for users"""
         payload = {
             'email': 'testuser@npminit.com'
         }
@@ -113,3 +116,56 @@ class PublicUserApiTests(TestCase):
     
         self.assertNotIn('token', res.data)
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_create_token_missing_field(self):
+        """Test the email and password are required"""
+        res = self.client.post(ME_URL)
+    
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+class PrivateUserApiTests(TestCase):
+    """Test user private APIs"""
+    def setUp(self):
+        payload = {
+            'email': 'test@npminit.com',
+            'password': 'Testpass@123',
+            'name': 'Test User Name'
+        }
+        self.user = create_user(**payload)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+    
+    def test_retrieve_profile_success(self):
+        """Test retrieveing profile for logged in user"""
+        res = self.client.get(ME_URL)
+
+        payload = {
+            'name': self.user.name,
+            'email': self.user.email
+        }
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data, payload)
+        
+    def test_post_me_not_allowed(self):
+        """Test that POST si not allowed on the me URL"""
+        payload = {
+            'name': 'New Name',
+            'password': 'pass123'
+        }
+        res = self.client.post(ME_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_update_user_profile(self):
+        """Test updating user profile for authenticated user"""
+        payload = {
+            'name': 'New Name',
+            'password': 'pass123'
+        }
+        res = self.client.patch(ME_URL, payload)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.name, payload['name'])
+        self.assertTrue(self.user.check_password(payload['password']))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
